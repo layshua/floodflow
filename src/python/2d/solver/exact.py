@@ -12,12 +12,13 @@ class RiemannSolverSWE1DExact(RiemannSolverSWE1D):
 
     def __init__(
         self, left_prim_state, right_prim_state,
-        nr_iters, gravity=9.81,
+        nr_iters, gravity=9.81, tol=1e-6
     ):
         self.left_prim_state = left_prim_state
         self.right_prim_state = right_prim_state
         self.nr_iters = nr_iters
         self.gravity = gravity
+        self.tol = tol
 
         # Left state helpers (density, velocity, celerity)
         self.dl = self.left_prim_state.density
@@ -68,13 +69,53 @@ class RiemannSolverSWE1DExact(RiemannSolverSWE1D):
             ) / (gel + ger)
             return ds
 
+    def _geofun(self, d, dk, ck):
+        """
+        To evaluate the functions FL and FR, as well
+        as their derivatives in the iterative Riemann
+        solver for the case of the wet-bed.
+        """
+        if (d <= dk):
+            # Wave is a rarefaction (or depression)
+            c = sqrt(self.gravity * d)
+            f = 2.0 * (c - ck)
+            fd = self.gravity / c
+        else:
+            # Wave is a shock wave (or bore)
+            ges = sqrt(0.5 * self.gravity * (d + dk) / (d * dk))
+            f = (d - dk)*ges
+            fd = ges - 0.25 * self.gravity * (d - dk) / (ges * d * d)
+        return f, fd
+
     def _solve_wet_bed(self):
         """
+        Solve the Riemann problem exactly for the case
+        of a wet-bed.
         """
-        d0 = self._start_newton_raphson()
+        d0 = ds = self._start_newton_raphson()
         for i in range(0, self.nr_iters):
-            # TODO: Fill this in
-            pass
+            fl, fld = self._geofun(ds, self.dl, self.cl)
+            fr, frd = self._geofun(ds, self.dr, self.cr)
+            ds = ds - (fl + fr + self.ur - self.ul) / (fld + frd)
+            cha = abs(ds - d0) / (0.5 * (ds + d0))
+            if cha <= self.tol:
+                break
+            if (ds < 0.0):
+                ds = self.tol
+            d0 = ds
+
+        # Converged solution for depth DS in Star Region.
+        # Compute velocity 'us' in Star Region
+        us = 0.5 * (ul + ur) + 0.5 * (fr - fl)
+        cs = sqrt(self.gravity * ds)
+        return ds, us, cs
+
+    def _sample_wet(self, d, u, s, ds, us, cs):
+        """
+        Sample the solution through the wave structure
+        at a particular time for the wet-bed case
+        """
+        pass
 
     def solve(self, wavespeed=None):
         """
