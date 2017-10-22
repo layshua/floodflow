@@ -1,9 +1,9 @@
 from math import sqrt
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
-#from .riemann_solver import RiemannSolverSWE1D
 
 def plot_solution():
     csv = pd.read_csv(
@@ -15,52 +15,76 @@ def plot_solution():
     # Plot the basin/water height
     ax1 = fig.add_subplot(121, ylabel='Water height, h')
     ax1.plot(csv["x"], csv["h"], '-', color="brown")
-    plt.xlim(-25.0, 25.0)
+    plt.xlim(0.0, 50.0)
     plt.ylim(-0.05, 1.1)
 
     # Plot the x direction hu discharge
     ax2 = fig.add_subplot(122, ylabel='Water velocity, u')
     ax2.plot(csv["x"], csv["u"], '-', color="black")
-    plt.xlim(-25.0, 25.0)
+    plt.xlim(0, 50.0)
     plt.ylim(-5.5, 5.5)
     plt.show()
 
 
 class RiemannSolverSWE1DExact(object):
     """Solves the exact Riemann Problem for the one-
-    dimensional Shallow Water Equations.
+    dimensional Shallow Water Equations. This code
+    is a direct Python implementation of the algorithm
+    found in Toro (2001). See that text for details.
 
-    See Toro (2001) for details.
+    Parameters
+    ----------
+    hul : dict
+        Left-state height (h) and velocity (u)
+    hur : dict
+        Right-state height (h) and velocity (u)
+    chalen : float
+        Channel length in metres
+    gate : float
+        Instantaneous "gate" position in metres
+    time_out : float
+        The time at which to output the sampled wave-structure
+    nr_iters : int, optional
+        The number of iterations on the Newton Raphson procedure
+    gravity : float, optional
+        Acceleration due to gravity in ms^{-2}
+    tol : float, optional
+        Tolerance value to use as an exit condition in the
+        Newton-Raphson procedure
+    cells : int, optional
+        Number of cells to use in the x-direction
     """
 
     def __init__(
-        self, left_prim_state, 
-        right_prim_state,
+        self, hul, hur,
         chalen, gate, time_out,
         nr_iters=50, gravity=9.8,
-        tol=1e-6, mcells=500
+        tol=1e-6, cells=500
     ):
-        self.left_prim_state = left_prim_state
-        self.right_prim_state = right_prim_state
+        # Initialise the solver flow values and parameters
+        self.hul = hul
+        self.hur = hur
         self.chalen = chalen
         self.gate = gate
         self.time_out = time_out
         self.nr_iters = nr_iters
         self.gravity = gravity
         self.tol = tol
-        self.mcells = mcells
-        self.d = [0.0]*self.mcells
-        self.u = [0.0]*self.mcells
-        self.xcoord = [0.0]*self.mcells
+        self.cells = cells
+
+        # Create the height, velocity and coordinate arrays
+        self.d = np.zeros(self.cells)
+        self.u = np.zeros(self.cells)
+        self.x = np.zeros(self.cells)
 
         # Left state helpers (height, velocity, celerity)
-        self.dl = self.left_prim_state["height"]
-        self.ul = self.left_prim_state["velocity"]
+        self.dl = self.hul["height"]
+        self.ul = self.hul["velocity"]
         self.cl = sqrt(self.gravity*self.dl)
 
         # Right state helpers (height, velocity, celerity)
-        self.dr = self.right_prim_state["height"]
-        self.ur = self.right_prim_state["velocity"]
+        self.dr = self.hur["height"]
+        self.ur = self.hur["velocity"]
         self.cr = sqrt(self.gravity*self.dr)
 
         # Is this a dry bed case?
@@ -70,7 +94,7 @@ class RiemannSolverSWE1DExact(object):
         else:
             self.dry_bed = False
 
-    def _start_newton_raphson(self):
+    def _start_newton_raphson(self, dl, dr, ul, ur, cl, cr, g):
         """
         Determine the initial value for the Newton-Raphson
         iteration. Utilises the Two-Rarefaction Riemann Solver (TRRS)
@@ -78,12 +102,10 @@ class RiemannSolverSWE1DExact(object):
 
         See Toro (2001) for details.
         """
-        d_min = min(self.dl, self.dr)
+        d_min = min(dl, dr)
 
         # Use the TRRS solution as the initial value
-        ds = (1.0 / self.gravity) * (
-            0.5 * (self.cl + self.cr) - 0.25 * (self.ur - self.ul)
-        )**2
+        ds = (1.0 / g) * (0.5 * (cl + cr) - 0.25 * (ur - ul))**2
 
         if (ds <= d_min):
             # Use the TSRS approximation as initial value
@@ -91,45 +113,41 @@ class RiemannSolverSWE1DExact(object):
         else:
             # Use TSRS solution as the initial value with
             # ds computed from the TRRS estimate
-            gel = sqrt(
-                0.5 * self.gravity * (ds + self.dl) / (ds * self.dl)
-            )
-            ger = sqrt(
-                0.5 * self.gravity * (ds + self.dr) / (ds * self.dr)
-            )
-            ds = (
-                gel * self.dl + ger * self.dr - (self.ur - self.ul)
-            ) / (gel + ger)
+            gel = sqrt(0.5 * g * (ds + dl) / (ds * dl))
+            ger = sqrt(0.5 * g * (ds + dr) / (ds * dr))
+            ds = (gel * dl + ger * dr - (ur - ul)) / (gel + ger)
             return ds
 
-    def _geofun(self, d, dk, ck):
+    def _geofun(self, g, d, dk, ck):
         """
-        To evaluate the functions FL and FR, as well
+        Evaluate the functions FL and FR, as well
         as their derivatives in the iterative Riemann
         solver for the case of the wet-bed.
         """
         if (d <= dk):
             # Wave is a rarefaction (or depression)
-            c = sqrt(self.gravity * d)
+            c = sqrt(g * d)
             f = 2.0 * (c - ck)
-            fd = self.gravity / c
+            fd = g / c
         else:
             # Wave is a shock wave (or bore)
-            ges = sqrt(0.5 * self.gravity * (d + dk) / (d * dk))
+            ges = sqrt(0.5 * g * (d + dk) / (d * dk))
             f = (d - dk)*ges
-            fd = ges - 0.25 * self.gravity * (d - dk) / (ges * d * d)
+            fd = ges - 0.25 * g * (d - dk) / (ges * d * d)
         return f, fd
 
-    def _solve_wet_bed(self):
+    def _solve_wet_bed(self, dl, dr, ul, ur, cl, cr, g):
         """
         Solve the Riemann problem exactly for the case
         of a wet-bed.
         """
-        d0 = ds = self._start_newton_raphson()
+        d0 = ds = self._start_newton_raphson(
+            dl, dr, ul, ur, cl, cr, g
+        )
         for i in range(0, self.nr_iters):
-            fl, fld = self._geofun(ds, self.dl, self.cl)
-            fr, frd = self._geofun(ds, self.dr, self.cr)
-            ds = ds - (fl + fr + self.ur - self.ul) / (fld + frd)
+            fl, fld = self._geofun(g, ds, dl, cl)
+            fr, frd = self._geofun(g, ds, dr, cr)
+            ds = ds - (fl + fr + ur - ul) / (fld + frd)
             cha = abs(ds - d0) / (0.5 * (ds + d0))
             if cha <= self.tol:
                 break
@@ -139,83 +157,120 @@ class RiemannSolverSWE1DExact(object):
 
         # Converged solution for depth DS in Star Region.
         # Compute velocity 'us' in Star Region
-        us = 0.5 * (self.ul + self.ur) + 0.5 * (fr - fl)
-        cs = sqrt(self.gravity * ds)
+        us = 0.5 * (ul + ur) + 0.5 * (fr - fl)
+        cs = sqrt(g * ds)
 
-        for i in range(0, self.mcells):
-            xcoord = float(i) * self.chalen / float(self.mcells) - self.gate
+        for i in range(0, self.cells):
+            xcoord = float(i) * self.chalen / \
+                float(self.cells) - self.gate
             s = xcoord / self.time_out
-            self.xcoord[i] = xcoord
-            # Sample solution throughout wave structure at time time_out
-            self.d[i], self.u[i] = self._sample_wet(s, ds, us, cs)
+            self.x[i] = xcoord + self.gate
+            # Sample solution throughout wave
+            # structure at time time_out
+            self.d[i], self.u[i] = self._sample_wet(
+                dl, dr, ul, ur, cl, cr, g,
+                s, ds, us, cs
+            )
 
-    def _sample_wet(self, s, ds, us, cs):
+    def _solve_dry_bed(self, dl, dr):
+        """
+        Compute the exact solution in the case in which
+        a portion of dry bed is present.
+        """
+        for i in range(0, self.cells):
+            xcoord = float(i) * self.chalen / \
+                float(self.cells) - self.gate
+            s = xcoord / self.time_out
+            if (dl <= 0.0):
+                # Left state is dry
+                d, u = self._sample_left_dry_state(
+                    dl, dr, ul, ur, cl, cr, g, s
+                )
+            else:
+                if (dr <= 0.0):
+                    # Right state is dry
+                    d, u = self._sample_right_dry_state(
+                        dl, dr, ul, ur, cl, cr, g, s
+                    )
+                else:
+                    # Middle state is dry
+                    d, u = self._sample_middle_dry_state(
+                        dl, dr, ul, ur, cl, cr, g, s
+                    )
+            self.x[i] = xcoord + self.gate
+            self.d[i] = d
+            self.u[i] = u
+
+    def _sample_wet(
+        self, dl, dr, ul, ur, cl, cr, g,
+        s, ds, us, cs
+    ):
         """
         Sample the solution through the wave structure
-        at a particular time for the wet-bed case
+        at a particular time for the wet-bed case.
         """
         if (s <= us):
             # Sample left wave
-            if (ds >= self.dl):
+            if (ds >= dl):
                 # Left shock
                 ql = sqrt(
-                    (ds + self.dl) * ds / (2.0 * self.dl * self.dl)
+                    (ds + dl) * ds / (2.0 * dl * dl)
                 )
-                sl = self.ul - self.cl * ql
+                sl = ul - cl * ql
                 if (s <= sl):
                     # Sample point lies to the left of the shock
-                    d = self.dl
-                    u = self.ul
+                    d = dl
+                    u = ul
                 else:
                     # Sample point lies to the right of the shock
                     d = ds
                     u = us 
             else:
                 # Left rarefaction
-                shl = self.ul - self.cl
+                shl = ul - cl
                 if (s <= shl):
                     # Sample point lies to the right of the rarefaction
-                    d = self.dl
-                    u = self.ul
+                    d = dl
+                    u = ul
                 else:
                     stl = us - cs
                     if (s <= stl):
                         # Sample point lies inside the rarefaction
-                        u = (self.ul + 2.0 * self.cl + 2.0 * s) / 3.0
-                        c = (self.ul + 2.0 * self.cl - s) / 3.0
-                        d = c * c / self.gravity
+                        u = (ul + 2.0 * cl + 2.0 * s) / 3.0
+                        c = (ul + 2.0 * cl - s) / 3.0
+                        d = c * c / g
                     else:
                         # Sample point lies inside the STAR region
                         d = ds
                         u = us
         else:
             # Sample right wave
-            if (ds >= self.dr):
+            if (ds >= dr):
                 # Right shock
-                qr = sqrt((ds + self.dr) * ds / (2.0 * self.dr * self.dr))
-                sr = self.ur + self.cr * qr
+                qr = sqrt((ds + dr) * ds / (2.0 * dr * dr))
+                sr = ur + cr * qr
                 if (s >= sr):
                     # Sample point lies to the right of the shock
-                    d = self.dr
-                    u = self.ur
+                    d = dr
+                    u = ur
                 else:
                     # Sample point lies to the left of the shock
                     d = ds
                     u = us
             else:
                 # Right rarefaction
-                shr = self.ur + self.cr
+                shr = ur + cr
                 if (s >= shr):
                     # Sample point lies to the right of the rarefaction
-                    d = self.dr
-                    u = self.ur
+                    d = dr
+                    u = ur
                 else:
                     strr = us + cs
                     if (s >= strr):
                         # Sample point lies inside the rarefaction
-                        u = (self.ur - 2.0 * self.cr + 2.0 * s) / 3.0
-                        c = (-self.ur + 2.0 * self.cr + s) / 3.0
-                        d = c * c / self.gravity
+                        u = (ur - 2.0 * cr + 2.0 * s) / 3.0
+                        c = (-ur + 2.0 * cr + s) / 3.0
+                        d = c * c / g
                     else:
                         # Sample point lies in the STAR region
                         d = ds
@@ -224,36 +279,55 @@ class RiemannSolverSWE1DExact(object):
 
     def solve(self):
         """
+        Check whether this is a wet/dry bed situation and
+        set the appropriate heights/velocities at the
+        desired sampling points. Then output the sampled
+        values to disk.
         """
+        # Reassign variables for readability in formulae
+        dl = self.dl
+        dr = self.dr
+        ul = self.ul
+        ur = self.ur
+        cl = self.cl
+        cr = self.cr
+        g = self.gravity
+
+        # Determine if this is wet or dry case
         if self.dry_bed:
-            print("This is a dry bed test! Not implemented!")
+            self._solve_dry_bed(dl, dr)
         else:
-            self._solve_wet_bed()
+            self._solve_wet_bed(dl, dr, ul, ur, cl, cr, g)
+
+        # Output the test case results to disk
         outfile = open("exact.csv", "w")
         outfile.write("x,h,u\n")
-        for i in range(0, self.mcells):
+        for i in range(0, self.cells):
             outfile.write(
-                "%s,%s,%s\n" % (self.xcoord[i], self.d[i], self.u[i])
+                "%s,%s,%s\n" % (
+                    self.x[i], self.d[i], self.u[i]
+                )
             )
         outfile.close()
 
 
 if __name__ == "__main__":
-    left_prim_state = {
+    hul = {
         "height": 1.0,
         "velocity": -5.0
     }
-
-    right_prim_state = {
+    hur = {
         "height": 1.0,
         "velocity": 5.0
     }
+    chalen = 50.0
+    gate = 25.0
+    time_out = 2.5
 
     rse = RiemannSolverSWE1DExact(
-        left_prim_state, right_prim_state,
-        chalen=50.0, gate=25.0, time_out=2.5,
+        hul, hur, chalen, gate, time_out,
         nr_iters=50, gravity=9.8,
-        tol=1e-6, mcells=500
+        tol=1e-6, cells=500
     )
     rse.solve()
 
