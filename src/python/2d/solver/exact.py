@@ -16,13 +16,13 @@ def plot_solution():
     ax1 = fig.add_subplot(121, ylabel='Water height, h')
     ax1.plot(csv["x"], csv["h"], '-', color="brown")
     plt.xlim(0.0, 50.0)
-    plt.ylim(-0.05, 1.1)
+    plt.ylim(-0.01, 0.12)
 
     # Plot the x direction hu discharge
     ax2 = fig.add_subplot(122, ylabel='Water velocity, u')
     ax2.plot(csv["x"], csv["u"], '-', color="black")
     plt.xlim(0, 50.0)
-    plt.ylim(-5.5, 5.5)
+    plt.ylim(-3.5, 3.5)
     plt.show()
 
 
@@ -172,7 +172,7 @@ class RiemannSolverSWE1DExact(object):
                 s, ds, us, cs
             )
 
-    def _solve_dry_bed(self, dl, dr):
+    def _solve_dry_bed(self, dl, dr, ul, ur, cl, cr, g):
         """
         Compute the exact solution in the case in which
         a portion of dry bed is present.
@@ -200,6 +200,108 @@ class RiemannSolverSWE1DExact(object):
             self.x[i] = xcoord + self.gate
             self.d[i] = d
             self.u[i] = u
+
+    def _sample_left_dry_state(
+        self, dl, dr, ul, ur, cl, cr, g, s
+    ):
+        """
+        Sample the solution through the wave structure
+        at time 'time_out', for the case in which the
+        left state is dry. Solution consists of a single
+        right rarefaction.
+        """
+        shr = ur + cr
+        if (s >= shr):
+            # Sampling point lies to the right
+            # of the rarefaction
+            d = dr
+            u = ur
+        else:
+            strr = ur - 2.0 * cr
+            if (s >= strr):
+                # Sampling point lies inside the rarefaction
+                u = (ur - 2.0 * cr + 2.0 * s) / 3.0
+                c = (-ur + 2.0 * cr + s) / 3.0
+                d = c * c / g
+            else:
+                # Sampling point lies in dry-bed state
+                d = dl
+                u = ul
+        return d, u
+
+    def _sample_middle_dry_state(
+        self, dl, dr, ul, ur, cl, cr, g, s
+    ):
+        """
+        Sample the solution through the wave structure
+        at time 'time_out', for the case in which the
+        middle state is dry. Solution consists of a left
+        and a right rarefaction with a dry portion in the
+        middle.
+        """
+        # Compute the wave speeds
+        shl = ul - cl
+        ssl = ul + 2.0 * cl
+        ssr = ur - 2.0 * cr
+        shr = ur + cr
+
+        if (s <= shl):
+            # Sampling point lies to the left
+            # of the left rarefaction
+            return dl, ul
+
+        if (s > shl and s <= ssl):
+            # Sampling point lies inside the
+            # left rarefaction
+            u = (ul + 2.0 * cl + 2.0 * s) / 3.0
+            c = (ul + 2.0 * cl - s) / 3.0
+            d = c * c / g
+            return d, u
+
+        if (s > ssl and s <= ssr):
+            # Sampling point lies inside the middle
+            # dry bed region
+            return 0.0, 0.0
+
+        if (s > ssr and s <= shr):
+            # Sampling point lies inside the
+            # right rarefaction
+            u = (ur - 2.0 * cr + 2.0 * s) / 3.0
+            c = (-ur + 2.0 * cr + s) / 3.0
+            d = c * c / g
+            return d, u
+
+        if (s > shr):
+            # Sampling point lies to the right
+            # of the right rarefaction
+            return dr, ur
+
+    def _sample_right_dry_state(
+        self, dl, dr, ul, ur, cl, cr, g, s
+    ):
+        """
+        Sample the solution through the wave structure
+        at time 'time_out', for the case in which the
+        right state is dry. Solution consists of a
+        single left rarefaction.
+        """
+        shl = ul - cl
+        if (s <= shl):
+            # Sampling point lies to the left of the rarefaction
+            d = dl
+            u = ul
+        else:
+            stl = ul + 2.0 * cl
+            if (s <= stl):
+                # Sampling point lies inside the rarefaction
+                u = (ul + 2.0 * cl + 2.0 * s) / 3.0
+                c = (ul + 2.0 * cl - s) / 3.0
+                d = c * c / g
+            else:
+                # Sampling point lies in right dry-bed state
+                d = dr
+                u = ur
+        return d, u
 
     def _sample_wet(
         self, dl, dr, ul, ur, cl, cr, g,
@@ -295,7 +397,7 @@ class RiemannSolverSWE1DExact(object):
 
         # Determine if this is wet or dry case
         if self.dry_bed:
-            self._solve_dry_bed(dl, dr)
+            self._solve_dry_bed(dl, dr, ul, ur, cl, cr, g)
         else:
             self._solve_wet_bed(dl, dr, ul, ur, cl, cr, g)
 
@@ -313,16 +415,16 @@ class RiemannSolverSWE1DExact(object):
 
 if __name__ == "__main__":
     hul = {
-        "height": 1.0,
-        "velocity": -5.0
+        "height": 0.1,
+        "velocity": -3.0
     }
     hur = {
-        "height": 1.0,
-        "velocity": 5.0
+        "height": 0.1,
+        "velocity": 3.0
     }
     chalen = 50.0
     gate = 25.0
-    time_out = 2.5
+    time_out = 5.0
 
     rse = RiemannSolverSWE1DExact(
         hul, hur, chalen, gate, time_out,
