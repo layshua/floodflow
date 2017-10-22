@@ -30,19 +30,19 @@ class RiemannSolverSWE1DExact(object):
         self.u = [0.0]*self.mcells
         self.xcoord = [0.0]*self.mcells
 
-        # Left state helpers (density, velocity, celerity)
-        self.dl = self.left_prim_state["density"]
+        # Left state helpers (height, velocity, celerity)
+        self.dl = self.left_prim_state["height"]
         self.ul = self.left_prim_state["velocity"]
         self.cl = sqrt(self.gravity*self.dl)
 
-        # Right state helpers (density, velocity, celerity)
-        self.dr = self.right_prim_state["density"]
+        # Right state helpers (height, velocity, celerity)
+        self.dr = self.right_prim_state["height"]
         self.ur = self.right_prim_state["velocity"]
         self.cr = sqrt(self.gravity*self.dr)
 
         # Is this a dry bed case?
-        self.d_critical = (self.ur - self.ul) - 2.0 * (self.cl + self.cr)
-        if (self.dl <= 0.0 or self.dr <= 0.0 or self.d_critical >= 0.0):
+        d_critical = (self.ur - self.ul) - 2.0 * (self.cl + self.cr)
+        if (self.dl <= 0.0 or self.dr <= 0.0 or d_critical >= 0.0):
             self.dry_bed = True
         else:
             self.dry_bed = False
@@ -216,12 +216,12 @@ class RiemannSolverSWE1DExact(object):
 
 if __name__ == "__main__":
     left_prim_state = {
-        "density": 1.0,
+        "height": 1.0,
         "velocity": 2.5
     }
 
     right_prim_state = {
-        "density": 0.1,
+        "height": 0.1,
         "velocity": 0.0
     }
 
