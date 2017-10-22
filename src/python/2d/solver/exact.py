@@ -1,6 +1,29 @@
 from math import sqrt
 
+import matplotlib.pyplot as plt
+import pandas as pd
+
 #from .riemann_solver import RiemannSolverSWE1D
+
+def plot_solution():
+    csv = pd.read_csv(
+        "exact.csv"
+    )         
+    fig = plt.figure(figsize=(12,3))
+    fig.patch.set_facecolor('white')
+
+    # Plot the basin/water height
+    ax1 = fig.add_subplot(121, ylabel='Water height, h')
+    ax1.plot(csv["x"], csv["h"], '-', color="brown")
+    plt.xlim(-25.0, 25.0)
+    plt.ylim(-0.05, 1.1)
+
+    # Plot the x direction hu discharge
+    ax2 = fig.add_subplot(122, ylabel='Water velocity, u')
+    ax2.plot(csv["x"], csv["u"], '-', color="black")
+    plt.xlim(-25.0, 25.0)
+    plt.ylim(-5.5, 5.5)
+    plt.show()
 
 
 class RiemannSolverSWE1DExact(object):
@@ -169,7 +192,7 @@ class RiemannSolverSWE1DExact(object):
             # Sample right wave
             if (ds >= self.dr):
                 # Right shock
-                qr = sqrt((ds + self.dr) * ds) / (2.0 * self.dr * self.dr)
+                qr = sqrt((ds + self.dr) * ds / (2.0 * self.dr * self.dr))
                 sr = self.ur + self.cr * qr
                 if (s >= sr):
                     # Sample point lies to the right of the shock
@@ -207,6 +230,7 @@ class RiemannSolverSWE1DExact(object):
         else:
             self._solve_wet_bed()
         outfile = open("exact.csv", "w")
+        outfile.write("x,h,u\n")
         for i in range(0, self.mcells):
             outfile.write(
                 "%s,%s,%s\n" % (self.xcoord[i], self.d[i], self.u[i])
@@ -217,18 +241,20 @@ class RiemannSolverSWE1DExact(object):
 if __name__ == "__main__":
     left_prim_state = {
         "height": 1.0,
-        "velocity": 2.5
+        "velocity": -5.0
     }
 
     right_prim_state = {
-        "height": 0.1,
-        "velocity": 0.0
+        "height": 1.0,
+        "velocity": 5.0
     }
 
     rse = RiemannSolverSWE1DExact(
         left_prim_state, right_prim_state,
-        chalen=50.0, gate=10.0, time_out=7.0,
+        chalen=50.0, gate=25.0, time_out=2.5,
         nr_iters=50, gravity=9.8,
         tol=1e-6, mcells=500
     )
     rse.solve()
+
+    plot_solution()

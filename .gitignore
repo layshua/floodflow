@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*~
+
+# Test/Output files
+exact.csv
 
 # C extensions
 *.so
