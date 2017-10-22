@@ -1,9 +1,9 @@
 from math import sqrt
 
-from .riemann_solver import RiemannSolverSWE1D
+#from .riemann_solver import RiemannSolverSWE1D
 
 
-class RiemannSolverSWE1DExact(RiemannSolverSWE1D):
+class RiemannSolverSWE1DExact(object):
     """Solves the exact Riemann Problem for the one-
     dimensional Shallow Water Equations.
 
@@ -11,23 +11,33 @@ class RiemannSolverSWE1DExact(RiemannSolverSWE1D):
     """
 
     def __init__(
-        self, left_prim_state, right_prim_state,
-        nr_iters, gravity=9.81, tol=1e-6
+        self, left_prim_state, 
+        right_prim_state,
+        chalen, gate, time_out,
+        nr_iters=50, gravity=9.8,
+        tol=1e-6, mcells=500
     ):
         self.left_prim_state = left_prim_state
         self.right_prim_state = right_prim_state
+        self.chalen = chalen
+        self.gate = gate
+        self.time_out = time_out
         self.nr_iters = nr_iters
         self.gravity = gravity
         self.tol = tol
+        self.mcells = mcells
+        self.d = [0.0]*self.mcells
+        self.u = [0.0]*self.mcells
+        self.xcoord = [0.0]*self.mcells
 
         # Left state helpers (density, velocity, celerity)
-        self.dl = self.left_prim_state.density
-        self.ul = self.left_prim_state.velocity
+        self.dl = self.left_prim_state["density"]
+        self.ul = self.left_prim_state["velocity"]
         self.cl = sqrt(self.gravity*self.dl)
 
         # Right state helpers (density, velocity, celerity)
-        self.dr = self.right_prim_state.density
-        self.ur = self.right_prim_state.velocity
+        self.dr = self.right_prim_state["density"]
+        self.ur = self.right_prim_state["velocity"]
         self.cr = sqrt(self.gravity*self.dr)
 
         # Is this a dry bed case?
@@ -59,10 +69,10 @@ class RiemannSolverSWE1DExact(RiemannSolverSWE1D):
             # Use TSRS solution as the initial value with
             # ds computed from the TRRS estimate
             gel = sqrt(
-                0.5 * self.gravity * (ds + self.dl) / (self.ds * self.dl)
+                0.5 * self.gravity * (ds + self.dl) / (ds * self.dl)
             )
             ger = sqrt(
-                0.5 * self.gravity * (ds + self.dr) / (self.ds * self.dr)
+                0.5 * self.gravity * (ds + self.dr) / (ds * self.dr)
             )
             ds = (
                 gel * self.dl + ger * self.dr - (self.ur - self.ul)
@@ -106,18 +116,119 @@ class RiemannSolverSWE1DExact(RiemannSolverSWE1D):
 
         # Converged solution for depth DS in Star Region.
         # Compute velocity 'us' in Star Region
-        us = 0.5 * (ul + ur) + 0.5 * (fr - fl)
+        us = 0.5 * (self.ul + self.ur) + 0.5 * (fr - fl)
         cs = sqrt(self.gravity * ds)
-        return ds, us, cs
 
-    def _sample_wet(self, d, u, s, ds, us, cs):
+        for i in range(0, self.mcells):
+            xcoord = float(i) * self.chalen / float(self.mcells) - self.gate
+            s = xcoord / self.time_out
+            self.xcoord[i] = xcoord
+            # Sample solution throughout wave structure at time time_out
+            self.d[i], self.u[i] = self._sample_wet(s, ds, us, cs)
+
+    def _sample_wet(self, s, ds, us, cs):
         """
         Sample the solution through the wave structure
         at a particular time for the wet-bed case
         """
-        pass
+        if (s <= us):
+            # Sample left wave
+            if (ds >= self.dl):
+                # Left shock
+                ql = sqrt(
+                    (ds + self.dl) * ds / (2.0 * self.dl * self.dl)
+                )
+                sl = self.ul - self.cl * ql
+                if (s <= sl):
+                    # Sample point lies to the left of the shock
+                    d = self.dl
+                    u = self.ul
+                else:
+                    # Sample point lies to the right of the shock
+                    d = ds
+                    u = us 
+            else:
+                # Left rarefaction
+                shl = self.ul - self.cl
+                if (s <= shl):
+                    # Sample point lies to the right of the rarefaction
+                    d = self.dl
+                    u = self.ul
+                else:
+                    stl = us - cs
+                    if (s <= stl):
+                        # Sample point lies inside the rarefaction
+                        u = (self.ul + 2.0 * self.cl + 2.0 * s) / 3.0
+                        c = (self.ul + 2.0 * self.cl - s) / 3.0
+                        d = c * c / self.gravity
+                    else:
+                        # Sample point lies inside the STAR region
+                        d = ds
+                        u = us
+        else:
+            # Sample right wave
+            if (ds >= self.dr):
+                # Right shock
+                qr = sqrt((ds + self.dr) * ds) / (2.0 * self.dr * self.dr)
+                sr = self.ur + self.cr * qr
+                if (s >= sr):
+                    # Sample point lies to the right of the shock
+                    d = self.dr
+                    u = self.ur
+                else:
+                    # Sample point lies to the left of the shock
+                    d = ds
+                    u = us
+            else:
+                # Right rarefaction
+                shr = self.ur + self.cr
+                if (s >= shr):
+                    # Sample point lies to the right of the rarefaction
+                    d = self.dr
+                    u = self.ur
+                else:
+                    strr = us + cs
+                    if (s >= strr):
+                        # Sample point lies inside the rarefaction
+                        u = (self.ur - 2.0 * self.cr + 2.0 * s) / 3.0
+                        c = (-self.ur + 2.0 * self.cr + s) / 3.0
+                        d = c * c / self.gravity
+                    else:
+                        # Sample point lies in the STAR region
+                        d = ds
+                        u = us
+        return d, u
 
-    def solve(self, wavespeed=None):
+    def solve(self):
         """
         """
-        pass
+        if self.dry_bed:
+            print("This is a dry bed test! Not implemented!")
+        else:
+            self._solve_wet_bed()
+        outfile = open("exact.csv", "w")
+        for i in range(0, self.mcells):
+            outfile.write(
+                "%s,%s,%s\n" % (self.xcoord[i], self.d[i], self.u[i])
+            )
+        outfile.close()
+
+
+if __name__ == "__main__":
+    left_prim_state = {
+        "density": 1.0,
+        "velocity": 2.5
+    }
+
+    right_prim_state = {
+        "density": 0.1,
+        "velocity": 0.0
+    }
+
+    rse = RiemannSolverSWE1DExact(
+        left_prim_state, right_prim_state,
+        chalen=50.0, gate=10.0, time_out=7.0,
+        nr_iters=50, gravity=9.8,
+        tol=1e-6, mcells=500
+    )
+    rse.solve()
