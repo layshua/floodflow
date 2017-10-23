@@ -5,9 +5,9 @@ class RiemannSolverException(Exception):
     pass
 
 
-class RiemannSolverSWE1D(object):
+class RiemannSolver2D(object):
     """Abstract base class to provide interface to all
-    subsequent one-dimensional Shallow Water Equation-
+    subsequent two-dimensional Shallow Water Equation-
     based Riemann Solvers."""
     
     __metaclass__ = ABCMeta
@@ -16,7 +16,7 @@ class RiemannSolverSWE1D(object):
         pass
 
     @abstractmethod
-    def solve(self, wavespeed=None):
+    def flux(self):
         raise NotImplementedError(
-            "Should implement solve(..)"
+            "Should implement flux()"
         )
