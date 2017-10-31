@@ -1,9 +1,15 @@
 from math import sqrt
 
-from .exact import RiemannSolver2D
+from riemann_solver import RiemannSolver2D
 
 
-class RiemannSolver2DHLLC(RiemannSolverSWE2D):
+DOMAIN_DIR_N = 0
+DOMAIN_DIR_S = 1
+DOMAIN_DIR_E = 2
+DOMAIN_DIR_W = 3
+
+
+class RiemannSolver2DHLLC(RiemannSolver2D):
     def __init__(
         self, direction, left, right,
         gravity, depth_tol
@@ -13,21 +19,21 @@ class RiemannSolver2DHLLC(RiemannSolverSWE2D):
         self.right = right
         self.gravity = gravity
         self.depth_tol = depth_tol
-        self.dir_vec = self._set_dir_vec(self)
+        self.dir_vec = self._set_dir_vec()
 
         # Set the velocity values appropriately based on water depth
-        if self.left.z < depth_tol:
-            self.left.u = 0.0
-            self.left.v = 0.0
+        if self.left["z"] < depth_tol:
+            self.left["u"] = 0.0
+            self.left["v"] = 0.0
         else:
-            self.left.u = self.left.qx / self.left.h
-            self.left.v = self.left.qy / self.left.h
-        if self.right.z < depth_tol:
-            self.right.u = 0.0
-            self.right.v = 0.0
+            self.left["u"] = self.left["qx"] / self.left["h"]
+            self.left["v"] = self.left["qy"] / self.left["h"]
+        if self.right["z"] < depth_tol:
+            self.right["u"] = 0.0
+            self.right["v"] = 0.0
         else:
-            self.right.u = self.right.qx / self.right.h
-            self.right.v = self.right.qy / self.right.h
+            self.right["u"] = self.right["qx"] / self.right["h"]
+            self.right["v"] = self.right["qy"] / self.right["h"]
 
     def _set_dir_vec(self):
         """
@@ -35,7 +41,7 @@ class RiemannSolver2DHLLC(RiemannSolverSWE2D):
         upon whether this is a north-south facing Riemann
         Problem, or a west-east facing one.
         """
-        if (self.direction == "N" or self.direction == "S"):
+        if (self.direction == DOMAIN_DIR_N or self.direction == DOMAIN_DIR_S):
             # North-south faces
             return (0.0, 1.0)
         else:
@@ -60,21 +66,21 @@ class RiemannSolver2DHLLC(RiemannSolverSWE2D):
         Calculate the flux and return it for the
         HLLC Riemann Solver.
         """
-        zl = self.left.z
-        hl = self.left.h
-        qxl = self.left.qxl
-        qyl = self.left.qyl
-        ul = self.left.u
-        vl = self.left.v
-        zbl = self.left.zbl
+        zl = self.left["z"]
+        hl = self.left["h"]
+        qxl = self.left["qx"]
+        qyl = self.left["qy"]
+        ul = self.left["u"]
+        vl = self.left["v"]
+        zbl = self.left["zb"]
 
-        zr = self.right.z
-        hr = self.right.h
-        qxr = self.right.qxl
-        qyr = self.right.qyl
-        ur = self.right.u
-        vr = self.right.v
-        zbr = self.right.zbl
+        zr = self.right["z"]
+        hr = self.right["h"]
+        qxr = self.right["qx"]
+        qyr = self.right["qy"]
+        ur = self.right["u"]
+        vr = self.right["v"]
+        zbr = self.right["zb"]
 
         g = self.gravity
         depth_tol = self.depth_tol

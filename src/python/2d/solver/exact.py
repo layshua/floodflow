@@ -1,29 +1,34 @@
 from math import sqrt
+import os
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 
-def plot_solution():
-    csv = pd.read_csv(
-        "exact.csv"
-    )         
-    fig = plt.figure(figsize=(12,3))
+def plot_solution(test_idx, path, y_axis):
+    exact_csv = pd.read_csv(os.path.join(path, "exact_%s.csv" % test_idx))  
+    god_csv = pd.read_csv(os.path.join(path, "god_%s.csv" % test_idx))
+    
+    fig = plt.figure(figsize=(16,6))
     fig.patch.set_facecolor('white')
 
     # Plot the basin/water height
     ax1 = fig.add_subplot(121, ylabel='Water height, h')
-    ax1.plot(csv["x"], csv["h"], '-', color="brown")
+    ax1.plot(exact_csv["x"], exact_csv["h"], '-', color="black")
+    ax1.plot(god_csv["x"], god_csv["h"], 'o', color="blue", ms=4, mfc='none')
     plt.xlim(0.0, 50.0)
-    plt.ylim(-0.01, 0.12)
+    plt.ylim(y_axis["h"]["min"], y_axis["h"]["max"])
 
     # Plot the x direction hu discharge
     ax2 = fig.add_subplot(122, ylabel='Water velocity, u')
-    ax2.plot(csv["x"], csv["u"], '-', color="black")
+    ax2.plot(exact_csv["x"], exact_csv["u"], '-', color="black")
+    ax2.plot(god_csv["x"], god_csv["u"], 'o', color="blue", ms=4, mfc='none')
     plt.xlim(0, 50.0)
-    plt.ylim(-3.5, 3.5)
-    plt.show()
+    plt.ylim(y_axis["u"]["min"], y_axis["u"]["max"])
+    plt.savefig(os.path.join(path, "exact_%s.png" % test_idx))
 
 
 class RiemannSolverSWE1DExact(object):
@@ -163,7 +168,10 @@ class RiemannSolverSWE1DExact(object):
         for i in range(0, self.cells):
             xcoord = float(i) * self.chalen / \
                 float(self.cells) - self.gate
-            s = xcoord / self.time_out
+            if abs(self.time_out) < 1e-6:
+                s = 0.0
+            else:
+                s = xcoord / self.time_out
             self.x[i] = xcoord + self.gate
             # Sample solution throughout wave
             # structure at time time_out
@@ -379,7 +387,7 @@ class RiemannSolverSWE1DExact(object):
                         u = us
         return d, u
 
-    def solve(self):
+    def solve(self, test_idx, path):
         """
         Check whether this is a wet/dry bed situation and
         set the appropriate heights/velocities at the
@@ -402,7 +410,7 @@ class RiemannSolverSWE1DExact(object):
             self._solve_wet_bed(dl, dr, ul, ur, cl, cr, g)
 
         # Output the test case results to disk
-        outfile = open("exact.csv", "w")
+        outfile = open(os.path.join(path, "exact_%s.csv" % test_idx), "w")
         outfile.write("x,h,u\n")
         for i in range(0, self.cells):
             outfile.write(
@@ -414,23 +422,73 @@ class RiemannSolverSWE1DExact(object):
 
 
 if __name__ == "__main__":
-    hul = {
-        "height": 0.1,
-        "velocity": -3.0
-    }
-    hur = {
-        "height": 0.1,
-        "velocity": 3.0
-    }
-    chalen = 50.0
-    gate = 25.0
-    time_out = 5.0
+    path = "/home/mhallsmoore/sites/floodflow/out/"
 
-    rse = RiemannSolverSWE1DExact(
-        hul, hur, chalen, gate, time_out,
-        nr_iters=50, gravity=9.8,
-        tol=1e-6, cells=500
-    )
-    rse.solve()
+    tests = {
+        1: {
+            "hul": {"height": 1.0, "velocity": 2.5},
+            "hur": {"height": 0.1, "velocity": 0.0},
+            "chalen": 50.0,
+            "gate": 10.0,
+            "time_out": 7.0,
+            "y_axis": {
+                "h": {"min": 0.0, "max": 1.1},
+                "u": {"min": -0.5, "max": 4.5}
+            }
+        },
+        2: {
+            "hul": {"height": 1.0, "velocity": -5.0},
+            "hur": {"height": 1.0, "velocity": 5.0},
+            "chalen": 50.0,
+            "gate": 25.0,
+            "time_out": 2.5,
+            "y_axis": {
+                "h": {"min": 0.0, "max": 1.05},
+                "u": {"min": -5.5, "max": 5.5}
+            }
+        },
+        3: {
+            "hul": {"height": 1.0, "velocity": 0.0},
+            "hur": {"height": 0.0, "velocity": 0.0},
+            "chalen": 50.0,
+            "gate": 20.0,
+            "time_out": 4.0,
+            "y_axis": {
+                "h": {"min": -0.05, "max": 1.05},
+                "u": {"min": -0.5, "max": 7.0}
+            }
+        },
+        4: {
+            "hul": {"height": 0.0, "velocity": 0.0},
+            "hur": {"height": 1.0, "velocity": 0.0},
+            "chalen": 50.0,
+            "gate": 30.0,
+            "time_out": 4.0,
+            "y_axis": {
+                "h": {"min": -0.05, "max": 1.05},
+                "u": {"min": -7.0, "max": 0.5}
+            }
+        },
+        5: {
+            "hul": {"height": 0.1, "velocity": -3.0},
+            "hur": {"height": 0.1, "velocity": 3.0},
+            "chalen": 50.0,
+            "gate": 25.0,
+            "time_out": 5.0,
+            "y_axis": {
+                "h": {"min": -0.015, "max": 0.12},
+                "u": {"min": -3.5, "max": 3.5}
+            }
+        },
+    }
 
-    plot_solution()
+    for i in range(1, 6):
+        rse = RiemannSolverSWE1DExact(
+            tests[i]["hul"], tests[i]["hur"],
+            tests[i]["chalen"], tests[i]["gate"],
+            tests[i]["time_out"],
+            nr_iters=50, gravity=9.8,
+            tol=1e-6, cells=500
+        )
+        rse.solve(i, path)
+        plot_solution(i, path, tests[i]["y_axis"])
