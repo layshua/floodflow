@@ -133,14 +133,14 @@ def calc_time_step(cfl, dx, bcells, U, grav):
     max_speed = -1.0
     for i in range(1, bcells-1):
         h = U[i, 0]
-        u = U[i, 1]
+        u = U[i, 1] / h
         c = np.sqrt(grav * h)
         max_speed = max(max_speed, abs(u)+c)
     dt = cfl*dx/max_speed  # CFL condition
     return dt
 
 
-def update_solution(U, fluxes, dt, dx, bcells, grav, direction=3):
+def update_solution(U, fluxes, dt, dx, bcells, grav, direction=2):
     """
     Updates the solution of the equation 
     via the Godunov procedure.
@@ -150,9 +150,9 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=3):
         left = {
             "z": U[i, 0],
             "h": U[i, 0],
-            "qx": U[i, 0] * U[i, 1],
+            "qx": U[i, 1],
             "qy": 0.0,
-            "u": U[i, 1],
+            "u": U[i, 1] / U[i, 0],
             "v": 0.0,
             "zb": 0.0
         }
@@ -160,19 +160,19 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=3):
         right = {
             "z": U[i+1, 0],
             "h": U[i+1, 0],
-            "qx": U[i+1, 0] * U[i+1, 1],
+            "qx": U[i+1, 1],
             "qy": 0.0,
-            "u": U[i+1, 1],
+            "u": U[i+1, 1] / U[i+1, 0],
             "v": 0.0,
             "zb": 0.0
         }
 
-        rec_left = {}
-        rec_right = {}
+        rec_left = left
+        rec_right = right
 
-        ucStop, rec_left, rec_right = reconstruct_interface(
-            left, 0.0, right, 0.0, direction
-        )
+        #ucStop, rec_left, rec_right = reconstruct_interface(
+        #    left, 0.0, right, 0.0, direction
+        #)
 
         hllc_rs = RiemannSolver2DHLLC(
             direction, rec_left, rec_right, grav, VERY_SMALL
@@ -205,9 +205,9 @@ if __name__ == "__main__":
     test_case_toro_1(U, bcells)
     
     for n in range(1, 100):
-        print(t)
         if (t==tf): break
         dt = calc_time_step(cfl, dx, bcells, U, grav)
+        print(t, dt)
         if (t+dt > tf):
             dt = tf - t
         update_solution(U, fluxes, dt, dx, bcells, grav)
@@ -219,4 +219,4 @@ if __name__ == "__main__":
     out_csv = open(os.path.join(path, "god_1.csv"), "w")
     out_csv.write("x,h,u\n")
     for i, elem in enumerate(U):
-        out_csv.write("%s,%s,%s\n" % (i*dx*50.0, elem[0], elem[1]))
+        out_csv.write("%s,%s,%s\n" % (i*dx*50.0, elem[0], elem[1]/elem[0]))
