@@ -109,20 +109,19 @@ def reconstruct_interface(
     return ucStop, rec_left, rec_right
 
 
-def test_case_toro_1(U, bcells):
+def create_test_cases(U, bcells, hul, hur, chalen, gate):
     """
-    Populate the initial data with Toro's test case #1.
+    Populate the initial data for
+    the specified test case
     """
-    gate = 10.0
-    chalen = 50.0
     gate_cell = int(bcells / chalen * gate)
     
     for i in range(0, gate_cell):
-        U[i, 0] = 1.0
-        U[i, 1] = 2.5
+        U[i, 0] = hul["height"]
+        U[i, 1] = hul["velocity"]
     for i in range(gate_cell, bcells):
-        U[i, 0] = 0.1
-        U[i, 1] = 0.0
+        U[i, 0] = hur["height"]
+        U[i, 1] = hur["velocity"]
 
 
 def calc_time_step(cfl, dx, bcells, U, grav):
@@ -170,9 +169,9 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=3):
         rec_left = left
         rec_right = right
 
-        #ucStop, rec_left, rec_right = reconstruct_interface(
-        #    left, 0.0, right, 0.0, direction
-        #)
+        ucStop, rec_left, rec_right = reconstruct_interface(
+            left, 0.0, right, 0.0, direction
+        )
 
         hllc_rs = RiemannSolver2DHLLC(
             direction, rec_left, rec_right, grav, VERY_SMALL
@@ -190,33 +189,62 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=3):
 
 
 if __name__ == "__main__":
+    chalen = 50.0
     grav = 9.8
     cells = 100
     bcells = cells + 2
-    dx = 1.0/cells
-
+    dx = chalen/cells
     cfl = 0.9
-    t = 0.0
-    tf = 7.0
-    nsteps = 0
 
-    U = np.zeros((bcells,2))
-    fluxes = np.zeros((bcells,2))
-    test_case_toro_1(U, bcells)
-    
-    for n in range(1, 1000):
-        if (t==tf): break
-        dt = calc_time_step(cfl, dx, bcells, U, grav)
-        print(t, dt)
-        if (t+dt > tf):
-            dt = tf - t
-        update_solution(U, fluxes, dt, dx, bcells, grav)
-        t += dt
-        nsteps += 1
-    
-    
-    path = "/home/mhallsmoore/sites/floodflow/out/"
-    out_csv = open(os.path.join(path, "god_1.csv"), "w")
-    out_csv.write("x,h,u\n")
-    for i, elem in enumerate(U):
-        out_csv.write("%s,%s,%s\n" % (i*dx*50.0, elem[0], elem[1]/elem[0]))
+    test_cases = [
+        {
+            "hul": {"height": 1.0, "velocity": 2.5},
+            "hur": {"height": 0.1, "velocity": 0.0},
+            "gate": 10.0,
+            "time_out": 7.0,
+        },
+        {
+            "hul": {"height": 1.0, "velocity": -5.0},
+            "hur": {"height": 1.0, "velocity": 5.0},
+            "gate": 25.0,
+            "time_out": 2.5,
+        },
+        {
+            "hul": {"height": 1.0, "velocity": 0.0},
+            "hur": {"height": 0.0, "velocity": 0.0},
+            "gate": 20.0,
+            "time_out": 4.0,
+        }
+    ]
+
+    for i, test in enumerate(test_cases):
+        t = 0.0
+        tf = test["time_out"]
+        nsteps = 0
+
+        U = np.zeros((bcells,2))
+        fluxes = np.zeros((bcells,2))
+        create_test_cases(
+            U, bcells,
+            test["hul"], test["hur"], 
+            chalen, test["gate"]
+        )
+        
+        for n in range(1, 100000):
+            if (t==tf): break
+            dt = calc_time_step(cfl, dx, bcells, U, grav)
+            if (t+dt > tf):
+                dt = tf - t
+            update_solution(U, fluxes, dt, dx, bcells, grav)
+            t += dt
+            nsteps += 1
+            print(t, dt)
+        
+        path = "/home/mhallsmoore/sites/floodflow/out/"
+        out_csv = open(os.path.join(path, "god_%s.csv" % (i+1)), "w")
+        out_csv.write("x,h,u\n")
+        for i, elem in enumerate(U):
+            if elem[0] < VERY_SMALL:
+                out_csv.write("%s,%s,%s\n" % (i*dx, 0.0, 0.0))
+            else:
+                out_csv.write("%s,%s,%s\n" % (i*dx, elem[0], elem[1]/elem[0]))
