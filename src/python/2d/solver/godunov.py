@@ -140,7 +140,7 @@ def calc_time_step(cfl, dx, bcells, U, grav):
     return dt
 
 
-def update_solution(U, fluxes, dt, dx, bcells, grav, direction=2):
+def update_solution(U, fluxes, dt, dx, bcells, grav, direction=3):
     """
     Updates the solution of the equation 
     via the Godunov procedure.
@@ -204,7 +204,7 @@ if __name__ == "__main__":
     fluxes = np.zeros((bcells,2))
     test_case_toro_1(U, bcells)
     
-    for n in range(1, 100):
+    for n in range(1, 1000):
         if (t==tf): break
         dt = calc_time_step(cfl, dx, bcells, U, grav)
         print(t, dt)

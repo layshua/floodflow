@@ -131,13 +131,13 @@ class RiemannSolver2DHLLC(RiemannSolver2D):
         # Calculate the left and right fluxes
         fluxl = (
             ddis[0],
-            dvel[0] * qxl + self.dir_vec[0] * 0.5 * g * (zl * zl - 2.0 * zbl * hl),
-            dvel[0] * qyl + self.dir_vec[1] * 0.5 * g * (zl * zl - 2.0 * zbl * hl),
+            dvel[0] * qxl + self.dir_vec[0] * 0.5 * g * (zl * zl - 2.0 * zbl * zl),
+            dvel[0] * qyl + self.dir_vec[1] * 0.5 * g * (zl * zl - 2.0 * zbl * zl),
         )
         fluxr = (
             ddis[1],  # TODO: Possible bug below here with zbl possibly being zbr!!
-            dvel[1] * qxr + self.dir_vec[0] * 0.5 * g * (zr * zr - 2.0 * zbl * hr),
-            dvel[1] * qyr + self.dir_vec[1] * 0.5 * g * (zr * zr - 2.0 * zbl * hr)
+            dvel[1] * qxr + self.dir_vec[0] * 0.5 * g * (zr * zr - 2.0 * zbl * zr),
+            dvel[1] * qyr + self.dir_vec[1] * 0.5 * g * (zr * zr - 2.0 * zbl * zr)
         )
 
         # Choose the correct fluxes based on the speeds
@@ -165,5 +165,5 @@ class RiemannSolver2DHLLC(RiemannSolver2D):
             return (
                 f1m,
                 self.dir_vec[0] * f2m + self.dir_vec[1] * f1m * ur,
-                self.dir_vec[0] * f1m + vr + self.dir_vec[1] * f2m
+                self.dir_vec[0] * f1m * vr + self.dir_vec[1] * f2m
             )
