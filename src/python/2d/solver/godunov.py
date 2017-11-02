@@ -118,10 +118,10 @@ def create_test_cases(U, bcells, hul, hur, chalen, gate):
     
     for i in range(0, gate_cell):
         U[i, 0] = hul["height"]
-        U[i, 1] = hul["velocity"]
+        U[i, 1] = hul["velocity"] * hul["height"]
     for i in range(gate_cell, bcells):
         U[i, 0] = hur["height"]
-        U[i, 1] = hur["velocity"]
+        U[i, 1] = hur["velocity"] * hur["height"]
 
 
 def calc_time_step(cfl, dx, bcells, U, grav):
@@ -184,7 +184,18 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=2):
 
     # Update solution
     for i in range(1, bcells-1):
-        U[i] = U[i] + (dt/dx) * (fluxes[i-1]-fluxes[i])
+        delta = (1.0 / dx) * (fluxes[i-1]-fluxes[i])
+        if (
+            (delta[0] > 0.0 and delta[0] < VERY_SMALL) or 
+            (delta[0] < 0.0 and delta[0] > -VERY_SMALL)
+        ):
+            delta[0] = 0.0
+        if (
+            (delta[1] > 0.0 and delta[1] < VERY_SMALL) or 
+            (delta[1] < 0.0 and delta[1] > -VERY_SMALL)
+        ):
+            delta[1] = 0.0
+        U[i] = U[i] + dt * delta
 
     # BCs
     U[0] = U[1]
