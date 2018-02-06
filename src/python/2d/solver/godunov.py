@@ -6,6 +6,7 @@ from hllc import RiemannSolver2DHLLC
 
 
 VERY_SMALL = 1e-10
+#VERY_SMALL = 1e-5
 QUITE_SMALL = VERY_SMALL * 10.0
 DOMAIN_DIR_N = 0
 DOMAIN_DIR_S = 1
@@ -197,6 +198,8 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=2):
             delta[1] = 0.0
         U[i] = U[i] + dt * delta
 
+    # TODO: Add RK4 here!!!
+
     # BCs
     U[0] = U[1]
     U[bcells-1] = U[bcells-2]
@@ -205,7 +208,7 @@ def update_solution(U, fluxes, dt, dx, bcells, grav, direction=2):
 if __name__ == "__main__":
     chalen = 50.0
     grav = 9.8
-    cells = 100
+    cells = 500
     bcells = cells + 2
     dx = chalen/cells
     cfl = 0.9
@@ -270,6 +273,7 @@ if __name__ == "__main__":
         out_csv = open(os.path.join(path, "god_%s.csv" % (i+1)), "w")
         out_csv.write("x,h,u\n")
         for i, elem in enumerate(U):
+            print("i, elem", i, elem)
             if elem[0] < VERY_SMALL:
                 out_csv.write("%s,%s,%s\n" % (i*dx, 0.0, 0.0))
             else:
